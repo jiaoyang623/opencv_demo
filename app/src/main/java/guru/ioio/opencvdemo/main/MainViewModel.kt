@@ -1,5 +1,6 @@
 package guru.ioio.opencvdemo.main
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Log
@@ -7,23 +8,24 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import guru.ioio.opencvdemo.App
+import guru.ioio.opencvdemo.OpenCVUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.opencv.android.Utils
 import org.opencv.core.Core
 import org.opencv.core.Mat
+import org.opencv.core.Scalar
 import org.opencv.core.Size
 import org.opencv.dnn.Dnn
 import org.opencv.dnn.Net
 import org.opencv.imgproc.Imgproc
-import org.opencv.objdetect.FaceDetectorYN
-import java.io.File
-import java.io.FileOutputStream
 
 class MainViewModel : ViewModel() {
     val age: MutableLiveData<String> = MutableLiveData()
     val gender: MutableLiveData<String> = MutableLiveData()
+
+    val faceImage: MutableLiveData<Bitmap> = MutableLiveData()
 
     private var ageNet: Net? = null
     private var genderNet: Net? = null
@@ -31,8 +33,8 @@ class MainViewModel : ViewModel() {
     private suspend fun getAgeNet(): Net {
         ageNet?.let { return it }
         ageNet = withContext(Dispatchers.IO) {
-            val modelPath = copyFile("age_net.caffemodel")
-            val configPath = copyFile("age_deploy.prototxt")
+            val modelPath = OpenCVUtils.copyOpenCVFile("age_net.caffemodel")
+            val configPath = OpenCVUtils.copyOpenCVFile("age_deploy.prototxt")
             Dnn.readNetFromCaffe(configPath, modelPath)
         }
         return ageNet!!
@@ -41,28 +43,14 @@ class MainViewModel : ViewModel() {
     private suspend fun getGenderNet(): Net {
         genderNet?.let { return it }
         genderNet = withContext(Dispatchers.IO) {
-            val modelPath = copyFile("gender_net.caffemodel")
-            val configPath = copyFile("gender_deploy.prototxt")
+            val modelPath = OpenCVUtils.copyOpenCVFile("gender_net.caffemodel")
+            val configPath = OpenCVUtils.copyOpenCVFile("gender_deploy.prototxt")
             Dnn.readNetFromCaffe(configPath, modelPath)
         }
         return genderNet!!
     }
 
     // copy file from asset to cache dir
-    private suspend fun copyFile(fileName: String): String =
-        withContext(Dispatchers.IO) {
-            val dir = App.ins.cacheDir
-            val file = File(dir, fileName)
-            if (!file.exists()) {
-                file.createNewFile()
-                App.ins.assets.open(fileName).use { input ->
-                    FileOutputStream(file).use { output ->
-                        input.copyTo(output)
-                    }
-                }
-            }
-            file.absolutePath
-        }
 
     private val imageSize = Size(227.0, 227.0)
 
@@ -74,16 +62,8 @@ class MainViewModel : ViewModel() {
 
     private suspend fun predictAgeAndGender(bitmap: Bitmap) {
         withContext(Dispatchers.IO) {
-            val src = Mat()
-            Utils.bitmapToMat(bitmap, src)
-            Imgproc.cvtColor(src, src, Imgproc.COLOR_RGBA2RGB)
-            Imgproc.resize(src, src, imageSize)
-            val blob = Dnn.blobFromImage(
-                src,
-                1.0,
-                imageSize,
-                Core.mean(src)
-            )
+            val src = OpenCVUtils.resize(bitmap, imageSize)
+            val blob = Dnn.blobFromImage(src, 1.0, imageSize, Core.mean(src))
             getAgeNet().run {
                 setInput(blob)
                 forward()
@@ -140,4 +120,32 @@ class MainViewModel : ViewModel() {
     )
 
     private fun mapAge(index: Int): String = ageMap[index] ?: "unknown"
+
+    fun detectFaces(context: Context, resId: Int) {
+        viewModelScope.launch {
+            val img = BitmapFactory.decodeResource(context.resources, resId)
+            val faces = FaceDetector.detectFace(img)
+            drawFace(img, faces)
+            faceImage.postValue(img)
+            Log.d("MainViewModel", "faces: ${faces.size}")
+        }
+    }
+
+    fun drawFace(src: Bitmap, faces: Array<FaceDetector.FaceInfo>) {
+        val dst = Mat()
+        Utils.bitmapToMat(src, dst)
+        for (face in faces) {
+            Imgproc.rectangle(
+                dst,
+                org.opencv.core.Point(face.x.toDouble(), face.y.toDouble()),
+                org.opencv.core.Point(
+                    (face.x + face.width).toDouble(),
+                    (face.y + face.height).toDouble()
+                ),
+                Scalar(255.0, 0.0, 0.0),
+                4
+            )
+        }
+        Utils.matToBitmap(dst, src)
+    }
 }

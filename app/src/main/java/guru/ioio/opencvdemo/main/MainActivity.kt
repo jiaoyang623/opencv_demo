@@ -17,6 +17,9 @@ class MainActivity : AppCompatActivity() {
             gender.observe(this@MainActivity) {
                 mBinding.gender.text = "性别：$it"
             }
+            faceImage.observe(this@MainActivity) {
+                mBinding.img.setImageBitmap(it)
+            }
         }
     }
     private val mBinding: ActivityMainBinding by lazy {
@@ -34,6 +37,7 @@ class MainActivity : AppCompatActivity() {
             val resid = getItem(position)
             mViewModel.getAgeAndGender(resid)
             mBinding.img.setImageResource(resid)
+            mViewModel.detectFaces(this@MainActivity, resid)
         }
     }
 
