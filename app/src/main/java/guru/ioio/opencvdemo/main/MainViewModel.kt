@@ -60,20 +60,29 @@ class MainViewModel : ViewModel() {
         }
     }
 
+    private var smallFace=true
     private suspend fun predictAgeAndGender(bitmap: Bitmap) {
         withContext(Dispatchers.IO) {
-            val src = OpenCVUtils.resize(bitmap, imageSize)
-            val blob = Dnn.blobFromImage(src, 1.0, imageSize, Core.mean(src))
-            getAgeNet().run {
-                setInput(blob)
-                forward()
-            }.let { age.postValue(getAgeFromPredictions(it)) }
+            FaceDetector.detectFace(bitmap, true).firstOrNull()?.let { faceInfo ->
+                if(smallFace){
 
-            getGenderNet().run {
-                setInput(blob)
-                forward()
-            }.let {
-                gender.postValue(getGenderFromPredictions(it))
+                }else {
+                    drawFace(bitmap, arrayOf(faceInfo))
+                    faceImage.postValue(bitmap)
+                }
+                val src = OpenCVUtils.resize(faceInfo.image!!, imageSize)
+                val blob = Dnn.blobFromImage(src, 1.0, imageSize, Core.mean(src))
+                getAgeNet().run {
+                    setInput(blob)
+                    forward()
+                }.let { age.postValue(getAgeFromPredictions(it)) }
+
+                getGenderNet().run {
+                    setInput(blob)
+                    forward()
+                }.let {
+                    gender.postValue(getGenderFromPredictions(it))
+                }
             }
         }
     }
@@ -131,17 +140,14 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    fun drawFace(src: Bitmap, faces: Array<FaceDetector.FaceInfo>) {
+    private fun drawFace(src: Bitmap, faces: Array<FaceDetector.FaceInfo>) {
         val dst = Mat()
         Utils.bitmapToMat(src, dst)
         for (face in faces) {
             Imgproc.rectangle(
                 dst,
-                org.opencv.core.Point(face.x.toDouble(), face.y.toDouble()),
-                org.opencv.core.Point(
-                    (face.x + face.width).toDouble(),
-                    (face.y + face.height).toDouble()
-                ),
+                org.opencv.core.Point(face.rect.left.toDouble(), face.rect.top.toDouble()),
+                org.opencv.core.Point(face.rect.right.toDouble(), face.rect.bottom.toDouble()),
                 Scalar(255.0, 0.0, 0.0),
                 4
             )

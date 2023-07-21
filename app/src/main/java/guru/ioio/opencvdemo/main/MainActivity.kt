@@ -37,7 +37,6 @@ class MainActivity : AppCompatActivity() {
             val resid = getItem(position)
             mViewModel.getAgeAndGender(resid)
             mBinding.img.setImageResource(resid)
-            mViewModel.detectFaces(this@MainActivity, resid)
         }
     }
 
